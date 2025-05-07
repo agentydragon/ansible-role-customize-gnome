@@ -1,10 +1,4 @@
 ---
-- name: Remove temporary directory for extensions
-  become_user: "{{ gnome_user }}"
-  ansible.builtin.file:
-    name: "{{ customize_gnome_temp_dir.path }}"
-    state: absent
-
 # GNOME Shell restart (only executed when explicitly notified)
 - name: Restart Gnome Shell
   listen: Restart Gnome Shell

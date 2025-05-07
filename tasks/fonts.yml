@@ -1,4 +1,4 @@
----
+# Install fonts in *gnome_fonts* by delegating to *tasks/install_font.yml*.
 - name: Install fonts
   ansible.builtin.include_tasks:
     file: install_font.yml
@@ -8,4 +8,5 @@
     loop_var: gnome_font
   notify: Refresh font cache
 
-# Font cache is refreshed via handler only when this task changed.
+# Font cache is refreshed via handler (Refresh font cache) only when
+# this task reports a change.

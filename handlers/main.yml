@@ -4,3 +4,15 @@
   ansible.builtin.file:
     name: "{{ customize_gnome_temp_dir.path }}"
     state: absent
+
+# GNOME Shell restart (only executed when explicitly notified)
+- name: Restart Gnome Shell
+  listen: Restart Gnome Shell
+  become_user: "{{ gnome_user }}"
+  ansible.builtin.command: killall -3 gnome-shell
+  when: not customize_gnome__skip_restart_gnome_shell
+
+- name: Refresh font cache
+  listen: Refresh font cache
+  become: true
+  ansible.builtin.command: fc-cache -fv

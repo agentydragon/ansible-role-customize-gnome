@@ -1,3 +1,7 @@
 ---
 gnome_user: "{{ ansible_user_id }}"
 customize_gnome__skip_restart_gnome_shell: false
+
+# Directory under which user GNOME extensions are installed.  Override
+# this in inventory if your setup differs.
+gnome_extensions_dir: "/home/{{ gnome_user }}/.local/share/gnome-shell/extensions"

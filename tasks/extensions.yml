@@ -1,0 +1,93 @@
+
+---
+# This file contains all tasks related to GNOME Shell extension
+# management.  It is included from *tasks/main.yml* with the tag
+# "extensions" so tags are not repeated on each individual task.
+
+# Directory where extensions are installed.  Users can override the
+# default in their inventory as `gnome_extensions_dir` if desired.
+- name: Set extensions directory fact
+  ansible.builtin.set_fact:
+    _extensions_dir: "{{ gnome_extensions_dir | default('/home/' + gnome_user + '/.local/share/gnome-shell/extensions') }}"
+
+# Temporary directory for processing downloads
+- name: Create a temporary directory for extensions
+  ansible.builtin.tempfile:
+    state: directory
+  become_user: "{{ gnome_user }}"
+  register: customize_gnome_temp_dir
+  notify: Remove temporary directory for extensions
+  when: not ansible_check_mode
+
+# Snapshot current enabled extensions so we can report changes later
+- name: Gather current enabled extensions
+  ansible.builtin.command: gnome-extensions list --enabled
+  become_user: "{{ gnome_user }}"
+  register: r_extensions_before
+  changed_when: false
+
+# Resolve extension information (download URLs, names, …)
+- name: Load GNOME Shell extension information
+  ansible.builtin.include_tasks: get_extension_info.yml
+  loop: "{{ gnome_extensions | default([]) }}"
+
+# Handle per-extension operations in one loop
+- name: Install / enable GNOME Shell extensions
+  become: true
+  become_user: "{{ gnome_user }}"
+  block:
+    - name: Ensure extension directory exists
+      ansible.builtin.file:
+        path: "{{ _extensions_dir }}/{{ item.name }}"
+        state: directory
+
+    - name: Download & unpack extension
+      ansible.builtin.unarchive:
+        src: "{{ item.url }}"
+        dest: "{{ _extensions_dir }}/{{ item.name }}"
+        remote_src: true
+        mode: 0644
+      register: _gnome_ext_unarchive
+
+    # If any extension archive was unpacked we flag that a GNOME Shell
+    # restart is required.  The actual restart is triggered only once
+    # after the loop has completed so that GNOME Shell is restarted a
+    # single time after all extensions are in place.
+    - name: Flag GNOME Shell restart requirement
+      ansible.builtin.set_fact:
+        customize_gnome__restart_required: true
+      when: _gnome_ext_unarchive is changed
+
+    - name: Enable extension
+      ansible.builtin.command: gnome-extensions enable {{ item.name }}
+      changed_when: false
+      ignore_errors: true
+  loop: "{{ gnome_extensions_full | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# -------------------------------------------------------------------
+# Trigger GNOME Shell restart (once) if any extension was unpacked
+# -------------------------------------------------------------------
+
+- name: Schedule GNOME Shell restart (once)
+  ansible.builtin.command: /usr/bin/true
+  changed_when: true
+  notify: Restart Gnome Shell
+  when:
+    - not ansible_check_mode
+    - customize_gnome__restart_required | default(false)
+
+# Capture enabled extensions after our changes and compute diff for reporting
+- name: Gather enabled extensions after changes
+  ansible.builtin.command: gnome-extensions list --enabled
+  become_user: "{{ gnome_user }}"
+  register: r_extensions_after
+  changed_when: false
+
+- name: Report changes in enabled extensions
+  ansible.builtin.debug:
+    msg: |
+      Extensions added:   {{ (r_extensions_after.stdout_lines | difference(r_extensions_before.stdout_lines)) | join(', ') | default('none', true) }}\n
+      Extensions removed: {{ (r_extensions_before.stdout_lines | difference(r_extensions_after.stdout_lines)) | join(', ') | default('none', true) }}
+  when: r_extensions_before.stdout != r_extensions_after.stdout

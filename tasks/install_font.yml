@@ -1,42 +1,29 @@
 ---
-- ansible.builtin.set_fact:
-    is_font_file: "{{  '.ttf' in gnome_font.url or '.otf' in gnome_font.url }}"
+# Determine if the URL points directly to a font file (.ttf /.otf) or
+# an archive (zip/tar…).  Installation is handled in one step either
+# way – we write directly to the system fonts directory and let Ansible
+# report changes, which then trigger the “Refresh font cache” handler.
 
-# Install a font from a ZIP file
-- name: Download and unzip font file for {{ gnome_font.name }}
+- ansible.builtin.set_fact:
+    _is_font_file: "{{ gnome_font.url | regex_search('(.ttf|.otf)$') is not none }}"
+
+# Archive case
+- name: Download & extract {{ gnome_font.name }} archive
   ansible.builtin.unarchive:
     src: "{{ gnome_font.url }}"
-    dest: "/tmp/"
+    dest: /usr/local/share/fonts/
     remote_src: true
-  # Unarchive module support the following extensions: .zip, .tar, .tar.gz, .tar.bz2, .tar.xz, and .tar.zst
-  when: not is_font_file
+    mode: 0774
+  when: not _is_font_file
   become: true
-  changed_when: false
+  notify: Refresh font cache
 
-# Install a font from a .ttf or .otf file
-- name: Download font file for {{ gnome_font.name }}
+# Single-file case
+- name: Download {{ gnome_font.name }} font file
   ansible.builtin.get_url:
     url: "{{ gnome_font.url }}"
-    dest: "/tmp/{{ gnome_font.fonts }}"
-  when: is_font_file
-  become: true
-  changed_when: false
-
-- name: Install font {{ gnome_font.name }}
-  ansible.builtin.copy:
-    src: "{{ item }}"
-    dest: /usr/local/share/fonts/
-    remote_src: true
+    dest: "/usr/local/share/fonts/{{ gnome_font.fonts | default(gnome_font.url | basename) }}"
     mode: 0774
+  when: _is_font_file
   become: true
-  with_fileglob: "/tmp/{{ gnome_font.fonts|default([]) }}"
-  when: not is_font_file
-
-- name: Install font {{ gnome_font.name }}
-  ansible.builtin.copy:
-    src: "/tmp/{{ gnome_font.fonts }}"
-    dest: /usr/local/share/fonts/
-    remote_src: true
-    mode: 0774
-  become: true
-  when: is_font_file
+  notify: Refresh font cache

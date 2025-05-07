@@ -1,0 +1,21 @@
+---
+# Task file that installs a single GNOME Shell extension (provided in *item*)
+# and optionally enables it when the item has the *enable* flag set to a truthy
+# value.
+
+- name: Ensure extension directory exists
+  ansible.builtin.file:
+    path: "{{ _extensions_dir }}/{{ item.name }}"
+    state: directory
+
+- name: Download & unpack extension
+  ansible.builtin.unarchive:
+    src: "{{ item.url }}"
+    dest: "{{ _extensions_dir }}/{{ item.name }}"
+    remote_src: true
+    mode: 0644
+
+- name: Enable extension if requested
+  ansible.builtin.command: gnome-extensions enable {{ item.name }}
+  when: item.enable | default(false)
+  changed_when: item.enable | default(false) and item.name not in (r_extensions_before.stdout_lines | default([]))

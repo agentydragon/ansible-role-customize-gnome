@@ -1,0 +1,98 @@
+---
+- name: Prepare the test container (install python and GNOME Shell)
+  hosts: all
+  gather_facts: false
+  become: yes
+  tasks:
+    # ---------------------------------------------------------------------
+    # 1.  Bootstrap Python – required for Ansible modules.  The stock Ubuntu
+    #     image ships without it.  As we cannot rely on the *apt* module yet
+    #     we use *raw*.
+    # ---------------------------------------------------------------------
+    - name: Install python3 and other required packages using raw apt
+      raw: >-
+        apt-get update -qq &&
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          python3 python3-apt curl ca-certificates dbus-user-session gnome-shell unzip
+
+    # ---------------------------------------------------------------------
+    # 2. Re-enable fact gathering now that Python is available.
+    # ---------------------------------------------------------------------
+    - name: Gather facts
+      setup:
+
+    - name: Ensure /usr/bin/python symlink exists
+      file:
+        src: /usr/bin/python3
+        dest: /usr/bin/python
+        state: link
+        force: yes
+
+    # ---------------------------------------------------------------------
+    # 3. Replace the real `gnome-extensions` CLI with a small stub.  The real
+    #    utility needs a running GNOME session which is not available inside
+    #    a headless container.  Installing the stub in /usr/local/bin ensures
+    #    it shadows /usr/bin/gnome-extensions.
+    # ---------------------------------------------------------------------
+    - name: Deploy stub for `gnome-extensions`
+      copy:
+        dest: /usr/local/bin/gnome-extensions
+        mode: "0755"
+        content: |
+          #!/usr/bin/env python3
+          """Tiny stub mimicking *gnome-extensions*.
+
+          Implements only `enable <UUID>` and `list --enabled` so that the
+          Ansible role can run inside a container without a graphical session.
+          """
+          import os
+          import sys
+
+          STORAGE = "/tmp/enabled_extensions.txt"
+
+          def load() -> set[str]:
+              if not os.path.exists(STORAGE):
+                  return set()
+              with open(STORAGE, "r", encoding="utf-8") as fh:
+                  return {l.strip() for l in fh if l.strip()}
+
+          def save(s: set[str]):
+              with open(STORAGE, "w", encoding="utf-8") as fh:
+                  fh.write("\n".join(sorted(s)))
+
+          if len(sys.argv) < 2:
+              sys.exit(0)
+
+          cmd = sys.argv[1]
+
+          if cmd == "enable" and len(sys.argv) >= 3:
+              uuid = sys.argv[2]
+              enabled = load()
+              enabled.add(uuid)
+              save(enabled)
+              sys.exit(0)
+
+          if cmd == "list":
+              enabled = load()
+              if enabled:
+                  print("\n".join(sorted(enabled)))
+              sys.exit(0)
+
+          sys.exit(0)
+
+    # ---------------------------------------------------------------------
+    # 4. Dummy implementation of the deprecated `gnome-shell-extension-tool`
+    #    (still referenced by the role at the time of writing).  We do *not*
+    #    assert on its behaviour in the tests.
+    # ---------------------------------------------------------------------
+    - name: Deploy no-op stub for deprecated `gnome-shell-extension-tool`
+      copy:
+        dest: /usr/local/bin/gnome-shell-extension-tool
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          if [[ "$1" == "-e" && -n "$2" ]]; then
+            echo "$2 is now enabled" >&2
+            exit 0
+          fi
+          exit 0

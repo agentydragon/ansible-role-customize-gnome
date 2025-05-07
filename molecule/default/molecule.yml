@@ -1,0 +1,52 @@
+---
+# Molecule scenario that validates the installation of a GNOME Shell
+# extension on a completely fresh Ubuntu image.
+#
+# The role expects a running GNOME environment.  Spawning a full graphical
+# session inside the CI container would be heavyweight and brittle.  What we
+# *do* need is the `gnome-shell` binary (to parse the version string) while we
+# can replace `gnome-extensions` with a tiny stub that fulfils the interface
+# the role relies on (`list --enabled` and `enable <UUID>`).  The stub is
+# installed during the *prepare* playbook.
+
+dependency:
+  name: galaxy
+
+driver:
+  name: docker
+
+platforms:
+  - name: ubuntu
+    image: ubuntu:22.04
+# A command that keeps the container running is required, otherwise the
+# instance would exit immediately and become unreachable for Ansible.  We use
+# systemd's stub but for simplicity an infinite sleep works as well.
+    command: /usr/bin/sleep infinity
+    privileged: true
+
+provisioner:
+  name: ansible
+  log: true
+  inventory:
+    host_vars:
+      ubuntu:
+        # Install a single extension (hidetopbar) and make sure it gets
+        # enabled.
+        gnome_extensions:
+          - id: 545        # hidetopbar@mathieu.bidon.ca
+            enable: true
+        # Run everything for the root user that already exists inside the
+        # container.
+        gnome_user: root
+
+scenario:
+  test_sequence:
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
+
+lint: |
+  set -e
+  yamllint .

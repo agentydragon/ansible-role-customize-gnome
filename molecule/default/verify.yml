@@ -1,0 +1,25 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Check that the extension directory exists
+      stat:
+        path: "/home/root/.local/share/gnome-shell/extensions/hidetopbar@mathieu.bidon.ca"
+      register: ext_dir
+
+    - name: Assert extension has been installed
+      assert:
+        that:
+          - ext_dir.stat.exists
+          - ext_dir.stat.isdir
+
+    - name: Verify that the extension is enabled via stub
+      command: gnome-extensions list --enabled
+      register: ext_list
+      changed_when: false
+
+    - name: Assert extension appears in enabled list
+      assert:
+        that:
+          - "'hidetopbar@mathieu.bidon.ca' in ext_list.stdout.splitlines()"

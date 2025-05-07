@@ -6,7 +6,9 @@
   loop_control:
     label: "{{ gnome_font.name }}"
     loop_var: gnome_font
-  notify: Refresh font cache
+# The included task files emit the notification themselves, therefore we do
+# not declare a handler here to avoid an Ansible syntax error ("notify" is not
+# valid on an include_tasks statement).
 
 # Font cache is refreshed via handler (Refresh font cache) only when
 # this task reports a change.

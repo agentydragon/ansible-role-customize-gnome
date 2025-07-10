@@ -35,9 +35,9 @@ provisioner:
         gnome_extensions:
           - id: 545        # hidetopbar@mathieu.bidon.ca
             enable: true
-        # Run everything for the root user that already exists inside the
-        # container.
-        gnome_user: root
+        # Run everything under an unprivileged user so that the real
+        # `gnome-extensions` binary can talk to the GNOME Shell instance.
+        gnome_user: gnome
 
 scenario:
   test_sequence:
